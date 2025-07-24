@@ -6,6 +6,14 @@ export interface PageNode {
   type: 'page' | 'component' | 'layout'
   connections: string[]
   position?: { x: number; y: number }
+  preview?: {
+    title: string
+    description: string
+    elements: string[]
+    hasState: boolean
+    hasProps: boolean
+    complexity: 'low' | 'medium' | 'high'
+  }
 }
 
 export interface RouteInfo {

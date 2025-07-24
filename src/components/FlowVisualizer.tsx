@@ -14,7 +14,11 @@ import {
   Route,
   Component,
   Layout,
-  ExternalLink
+  ExternalLink,
+  Eye,
+  Code,
+  GitBranch,
+  Clock
 } from 'lucide-react'
 import { AnalysisResult, PageNode } from '@/types/analysis'
 
@@ -25,17 +29,22 @@ interface FlowVisualizerProps {
 
 export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualizerProps) {
   const [selectedNode, setSelectedNode] = useState<PageNode | null>(null)
-  const [zoom, setZoom] = useState(1)
+  const [zoom, setZoom] = useState(0.8)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [nodes, setNodes] = useState<PageNode[]>([])
 
   useEffect(() => {
-    // Position nodes in a circular layout
+    // Create a more sophisticated layout algorithm
     const positionedNodes = analysisResult.pages.map((page, index) => {
-      const angle = (index / analysisResult.pages.length) * 2 * Math.PI
-      const radius = Math.min(300, 50 + analysisResult.pages.length * 20)
-      const x = 400 + radius * Math.cos(angle)
-      const y = 300 + radius * Math.sin(angle)
+      // Create a hierarchical flow layout
+      const cols = Math.ceil(Math.sqrt(analysisResult.pages.length))
+      const rows = Math.ceil(analysisResult.pages.length / cols)
+      
+      const col = index % cols
+      const row = Math.floor(index / cols)
+      
+      const x = 100 + col * 320 // Increased spacing for cards
+      const y = 100 + row * 280 // Increased spacing for cards
       
       return {
         ...page,
@@ -45,57 +54,74 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
     setNodes(positionedNodes)
   }, [analysisResult])
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.2, 3))
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.2, 0.5))
-  const handleResetZoom = () => setZoom(1)
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2))
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.3))
+  const handleResetZoom = () => setZoom(0.8)
 
   const getNodeColor = (type: string) => {
     switch (type) {
-      case 'page': return 'bg-blue-500'
-      case 'component': return 'bg-green-500'
-      case 'layout': return 'bg-purple-500'
-      default: return 'bg-gray-500'
+      case 'page': return 'from-blue-500 to-blue-600'
+      case 'component': return 'from-green-500 to-green-600'
+      case 'layout': return 'from-purple-500 to-purple-600'
+      default: return 'from-gray-500 to-gray-600'
     }
   }
 
   const getNodeIcon = (type: string) => {
     switch (type) {
-      case 'page': return <FileText className="w-4 h-4" />
-      case 'component': return <Component className="w-4 h-4" />
-      case 'layout': return <Layout className="w-4 h-4" />
-      default: return <FileText className="w-4 h-4" />
+      case 'page': return <FileText className="w-5 h-5" />
+      case 'component': return <Component className="w-5 h-5" />
+      case 'layout': return <Layout className="w-5 h-5" />
+      default: return <FileText className="w-5 h-5" />
+    }
+  }
+
+  const getStatusBadge = (node: PageNode) => {
+    if (node.connections.length > 0) {
+      return <Badge className="bg-green-100 text-green-800 text-xs">CONNECTED</Badge>
+    }
+    return <Badge className="bg-orange-100 text-orange-800 text-xs">ORPHAN</Badge>
+  }
+
+  const getComplexityColor = (complexity: 'low' | 'medium' | 'high') => {
+    switch (complexity) {
+      case 'low': return 'text-green-600 bg-green-50'
+      case 'medium': return 'text-yellow-600 bg-yellow-50'
+      case 'high': return 'text-red-600 bg-red-50'
+      default: return 'text-gray-600 bg-gray-50'
     }
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex">
       {/* Sidebar */}
-      <div className="w-80 border-r bg-white flex flex-col">
+      <div className="w-80 border-r bg-white/80 backdrop-blur-sm flex flex-col shadow-lg">
         {/* Header */}
-        <div className="p-6 border-b">
+        <div className="p-6 border-b bg-white/90">
           <div className="flex items-center justify-between mb-4">
-            <Button variant="ghost" size="sm" onClick={onBack}>
+            <Button variant="ghost" size="sm" onClick={onBack} className="hover:bg-slate-100">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hover:bg-slate-50">
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
           </div>
           
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 mb-1">
+            <h2 className="text-xl font-bold text-slate-900 mb-1">
               {analysisResult.repoName}
             </h2>
-            <p className="text-sm text-slate-600 mb-3">
+            <p className="text-sm text-slate-600 mb-3 flex items-center">
+              <GitBranch className="w-4 h-4 mr-1" />
               {analysisResult.pages.length} pages • {analysisResult.routes.length} routes
             </p>
             <a 
               href={analysisResult.repoUrl} 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center"
+              className="text-sm text-primary hover:underline flex items-center font-medium"
             >
               View Repository <ExternalLink className="w-3 h-3 ml-1" />
             </a>
@@ -104,23 +130,26 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
 
         {/* Analysis Summary */}
         <div className="p-6 border-b">
-          <h3 className="font-medium text-slate-900 mb-3">Analysis Summary</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Total Files</span>
-              <span className="font-medium">{analysisResult.totalFiles}</span>
+          <h3 className="font-semibold text-slate-900 mb-4 flex items-center">
+            <Eye className="w-4 h-4 mr-2" />
+            Analysis Summary
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{analysisResult.totalFiles}</div>
+              <div className="text-xs text-blue-600 font-medium">Total Files</div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Analyzed Files</span>
-              <span className="font-medium">{analysisResult.analyzedFiles}</span>
+            <div className="bg-green-50 p-3 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{analysisResult.analyzedFiles}</div>
+              <div className="text-xs text-green-600 font-medium">Analyzed</div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Pages Found</span>
-              <span className="font-medium">{analysisResult.pages.length}</span>
+            <div className="bg-purple-50 p-3 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{analysisResult.pages.length}</div>
+              <div className="text-xs text-purple-600 font-medium">Pages</div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Routes Found</span>
-              <span className="font-medium">{analysisResult.routes.length}</span>
+            <div className="bg-orange-50 p-3 rounded-lg">
+              <div className="text-2xl font-bold text-orange-600">{analysisResult.routes.length}</div>
+              <div className="text-xs text-orange-600 font-medium">Routes</div>
             </div>
           </div>
         </div>
@@ -128,38 +157,51 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
         {/* Pages List */}
         <div className="flex-1 overflow-hidden">
           <div className="p-6 pb-4">
-            <h3 className="font-medium text-slate-900 mb-3">Pages & Components</h3>
+            <h3 className="font-semibold text-slate-900 mb-3 flex items-center">
+              <Code className="w-4 h-4 mr-2" />
+              Components
+            </h3>
           </div>
           <ScrollArea className="flex-1 px-6">
-            <div className="space-y-2 pb-6">
+            <div className="space-y-3 pb-6">
               {nodes.map((node) => (
                 <Card 
                   key={node.id}
-                  className={`cursor-pointer transition-colors hover:bg-slate-50 ${
-                    selectedNode?.id === node.id ? 'ring-2 ring-primary' : ''
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:scale-[1.02] border-l-4 ${
+                    selectedNode?.id === node.id 
+                      ? 'ring-2 ring-primary shadow-lg scale-[1.02] border-l-primary' 
+                      : node.type === 'page' 
+                        ? 'border-l-blue-500' 
+                        : node.type === 'layout' 
+                          ? 'border-l-purple-500' 
+                          : 'border-l-green-500'
                   }`}
                   onClick={() => setSelectedNode(node)}
                 >
-                  <CardContent className="p-3">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 ${getNodeColor(node.type)} rounded-lg flex items-center justify-center text-white`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start space-x-3">
+                      <div className={`w-10 h-10 bg-gradient-to-br ${getNodeColor(node.type)} rounded-xl flex items-center justify-center text-white shadow-sm`}>
                         {getNodeIcon(node.type)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-slate-900 truncate">
-                          {node.name}
-                        </p>
-                        <p className="text-xs text-slate-600 truncate">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="font-semibold text-sm text-slate-900 truncate">
+                            {node.name}
+                          </p>
+                          {getStatusBadge(node)}
+                        </div>
+                        <p className="text-xs text-slate-600 truncate font-mono">
                           {node.path}
                         </p>
+                        <p className="text-xs text-slate-500 truncate mt-1">
+                          {node.filePath}
+                        </p>
                       </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {node.type}
-                      </Badge>
                     </div>
                     {node.connections.length > 0 && (
-                      <div className="mt-2 pt-2 border-t">
-                        <p className="text-xs text-slate-600">
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <p className="text-xs text-slate-600 flex items-center">
+                          <GitBranch className="w-3 h-3 mr-1" />
                           {node.connections.length} connection{node.connections.length !== 1 ? 's' : ''}
                         </p>
                       </div>
@@ -175,53 +217,76 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
       {/* Main Canvas */}
       <div className="flex-1 flex flex-col">
         {/* Canvas Header */}
-        <div className="p-4 border-b bg-white flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Route className="w-5 h-5 text-primary" />
-            <h3 className="font-medium text-slate-900">Navigation Flow</h3>
+        <div className="p-4 border-b bg-white/90 backdrop-blur-sm flex items-center justify-between shadow-sm">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary/80 rounded-lg flex items-center justify-center">
+              <Route className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900">Navigation Flow</h3>
+              <p className="text-xs text-slate-600 flex items-center">
+                <Clock className="w-3 h-3 mr-1" />
+                Last analyzed: {new Date(analysisResult.timestamp).toLocaleTimeString()}
+              </p>
+            </div>
           </div>
           
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={handleZoomOut}>
+            <Button variant="outline" size="sm" onClick={handleZoomOut} className="hover:bg-slate-50">
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <span className="text-sm text-slate-600 min-w-[60px] text-center">
+            <span className="text-sm text-slate-600 min-w-[60px] text-center font-mono">
               {Math.round(zoom * 100)}%
             </span>
-            <Button variant="outline" size="sm" onClick={handleZoomIn}>
+            <Button variant="outline" size="sm" onClick={handleZoomIn} className="hover:bg-slate-50">
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={handleResetZoom}>
+            <Button variant="outline" size="sm" onClick={handleResetZoom} className="hover:bg-slate-50">
               <RotateCcw className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 bg-slate-50 overflow-hidden relative">
+        <div className="flex-1 bg-gradient-to-br from-slate-50 to-slate-100 overflow-auto relative">
           <div 
             ref={canvasRef}
-            className="w-full h-full relative"
-            style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}
+            className="relative min-w-full min-h-full"
+            style={{ 
+              transform: `scale(${zoom})`, 
+              transformOrigin: 'top left',
+              width: `${100 / zoom}%`,
+              height: `${100 / zoom}%`
+            }}
           >
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
-              {/* Draw connections */}
+            {/* Connection Lines */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 1 }}>
               {nodes.map((node) => 
                 node.connections.map((connectionId) => {
                   const targetNode = nodes.find(n => n.id === connectionId)
                   if (!targetNode || !node.position || !targetNode.position) return null
                   
+                  const startX = node.position.x + 140 // Center of card
+                  const startY = node.position.y + 120
+                  const endX = targetNode.position.x + 140
+                  const endY = targetNode.position.y + 120
+                  
+                  // Create curved dotted line
+                  const midX = (startX + endX) / 2
+                  const midY = (startY + endY) / 2 - 50 // Curve upward
+                  
                   return (
-                    <line
-                      key={`${node.id}-${connectionId}`}
-                      x1={node.position.x + 40}
-                      y1={node.position.y + 40}
-                      x2={targetNode.position.x + 40}
-                      y2={targetNode.position.y + 40}
-                      stroke="#e2e8f0"
-                      strokeWidth="2"
-                      markerEnd="url(#arrowhead)"
-                    />
+                    <g key={`${node.id}-${connectionId}`}>
+                      <path
+                        d={`M ${startX} ${startY} Q ${midX} ${midY} ${endX} ${endY}`}
+                        stroke="#6366f1"
+                        strokeWidth="3"
+                        fill="none"
+                        strokeDasharray="8,4"
+                        markerEnd="url(#arrowhead)"
+                        className="drop-shadow-sm"
+                      />
+                    </g>
                   )
                 })
               )}
@@ -230,70 +295,157 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
               <defs>
                 <marker
                   id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="7"
-                  refX="9"
-                  refY="3.5"
+                  markerWidth="12"
+                  markerHeight="8"
+                  refX="11"
+                  refY="4"
                   orient="auto"
                 >
                   <polygon
-                    points="0 0, 10 3.5, 0 7"
-                    fill="#e2e8f0"
+                    points="0 0, 12 4, 0 8"
+                    fill="#6366f1"
+                    className="drop-shadow-sm"
                   />
                 </marker>
               </defs>
             </svg>
 
-            {/* Draw nodes */}
-            {nodes.map((node) => (
-              <div
-                key={node.id}
-                className={`absolute w-20 h-20 rounded-xl border-2 cursor-pointer transition-all hover:scale-110 ${
-                  selectedNode?.id === node.id 
-                    ? 'border-primary shadow-lg scale-110' 
-                    : 'border-slate-200 hover:border-slate-300'
-                } ${getNodeColor(node.type)} text-white flex flex-col items-center justify-center`}
-                style={{
-                  left: node.position?.x || 0,
-                  top: node.position?.y || 0,
-                }}
-                onClick={() => setSelectedNode(node)}
-              >
-                {getNodeIcon(node.type)}
-                <span className="text-xs font-medium mt-1 text-center leading-tight px-1">
-                  {node.name.length > 8 ? node.name.substring(0, 8) + '...' : node.name}
-                </span>
-              </div>
-            ))}
+            {/* Page Cards */}
+            {nodes.map((node) => {
+              const preview = node.preview || {
+                title: node.name,
+                description: `${node.type} component`,
+                elements: ['JSX Return', 'Component Logic'],
+                hasState: false,
+                hasProps: false,
+                complexity: 'low' as const
+              }
+              
+              return (
+                <div
+                  key={node.id}
+                  className={`absolute transition-all duration-300 hover:scale-105 ${
+                    selectedNode?.id === node.id ? 'scale-105 z-10' : 'z-0'
+                  }`}
+                  style={{
+                    left: node.position?.x || 0,
+                    top: node.position?.y || 0,
+                    zIndex: selectedNode?.id === node.id ? 10 : 2
+                  }}
+                >
+                  <Card 
+                    className={`w-72 h-56 cursor-pointer shadow-lg hover:shadow-xl transition-all duration-300 border-2 ${
+                      selectedNode?.id === node.id 
+                        ? 'border-primary shadow-2xl' 
+                        : 'border-slate-200 hover:border-slate-300'
+                    } bg-white/95 backdrop-blur-sm`}
+                    onClick={() => setSelectedNode(node)}
+                  >
+                    {/* Card Header */}
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-8 h-8 bg-gradient-to-br ${getNodeColor(node.type)} rounded-lg flex items-center justify-center text-white shadow-sm`}>
+                            {getNodeIcon(node.type)}
+                          </div>
+                          <div>
+                            <CardTitle className="text-sm font-semibold text-slate-900">
+                              {preview.title}
+                            </CardTitle>
+                            <p className="text-xs text-slate-600 font-mono">{node.path}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          {getStatusBadge(node)}
+                          <Badge className={`text-xs ${getComplexityColor(preview.complexity)}`}>
+                            {preview.complexity.toUpperCase()}
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+
+                    {/* Card Content - Real Preview */}
+                    <CardContent className="pt-0">
+                      <div className="bg-slate-50 rounded-lg p-3 mb-3 border">
+                        <div className="text-xs text-slate-600 mb-2">{preview.description}</div>
+                        <div className="space-y-1">
+                          {preview.elements.map((element, idx) => (
+                            <div key={idx} className="flex items-center space-x-2">
+                              <div className={`w-2 h-2 rounded-full ${
+                                element.includes('State') ? 'bg-blue-400' :
+                                element.includes('Props') ? 'bg-green-400' :
+                                element.includes('API') ? 'bg-red-400' :
+                                element.includes('Navigation') ? 'bg-purple-400' :
+                                'bg-slate-300'
+                              }`}></div>
+                              <span className="text-xs text-slate-700">{element}</span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Feature indicators */}
+                        <div className="flex items-center space-x-2 mt-2 pt-2 border-t border-slate-200">
+                          {preview.hasState && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600">
+                              State
+                            </Badge>
+                          )}
+                          {preview.hasProps && (
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-600">
+                              Props
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Route Info */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500 font-mono truncate">
+                          {node.filePath.split('/').pop()}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {node.type}
+                        </Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )
+            })}
           </div>
         </div>
 
         {/* Selected Node Details */}
         {selectedNode && (
-          <div className="border-t bg-white p-4">
-            <Card>
+          <div className="border-t bg-white/90 backdrop-blur-sm p-4 shadow-lg">
+            <Card className="border-l-4 border-l-primary">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center space-x-2">
-                  <div className={`w-6 h-6 ${getNodeColor(selectedNode.type)} rounded-md flex items-center justify-center text-white`}>
+                <CardTitle className="text-lg flex items-center space-x-3">
+                  <div className={`w-8 h-8 bg-gradient-to-br ${getNodeColor(selectedNode.type)} rounded-xl flex items-center justify-center text-white shadow-sm`}>
                     {getNodeIcon(selectedNode.type)}
                   </div>
-                  <span>{selectedNode.name}</span>
-                  <Badge variant="secondary">{selectedNode.type}</Badge>
+                  <div>
+                    <span className="text-slate-900">{selectedNode.name}</span>
+                    <Badge variant="secondary" className="ml-2">{selectedNode.type}</Badge>
+                  </div>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-900">Path</p>
-                  <p className="text-sm text-slate-600 font-mono">{selectedNode.path}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-900">File Path</p>
-                  <p className="text-sm text-slate-600 font-mono">{selectedNode.filePath}</p>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 mb-1">Route Path</p>
+                    <p className="text-sm text-slate-600 font-mono bg-slate-50 px-2 py-1 rounded">{selectedNode.path}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900 mb-1">File Location</p>
+                    <p className="text-sm text-slate-600 font-mono bg-slate-50 px-2 py-1 rounded truncate">{selectedNode.filePath}</p>
+                  </div>
                 </div>
                 {selectedNode.connections.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium text-slate-900 mb-2">
-                      Connections ({selectedNode.connections.length})
+                    <p className="text-sm font-semibold text-slate-900 mb-2 flex items-center">
+                      <GitBranch className="w-4 h-4 mr-1" />
+                      Connected Pages ({selectedNode.connections.length})
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {selectedNode.connections.map((connectionId) => {
@@ -302,7 +454,7 @@ export default function FlowVisualizer({ analysisResult, onBack }: FlowVisualize
                           <Badge 
                             key={connectionId} 
                             variant="outline" 
-                            className="cursor-pointer hover:bg-slate-100"
+                            className="cursor-pointer hover:bg-primary hover:text-white transition-colors"
                             onClick={() => setSelectedNode(connectedNode)}
                           >
                             {connectedNode.name}

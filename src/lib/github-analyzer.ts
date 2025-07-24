@@ -121,6 +121,10 @@ async function analyzeFileContent(file: GitHubFile): Promise<{
   routes: string[]
   imports: string[]
   exports: string[]
+  content: string
+  hasState: boolean
+  hasProps: boolean
+  complexity: 'low' | 'medium' | 'high'
 }> {
   if (!file.download_url) {
     return {
@@ -129,7 +133,11 @@ async function analyzeFileContent(file: GitHubFile): Promise<{
       isLayout: false,
       routes: [],
       imports: [],
-      exports: []
+      exports: [],
+      content: '',
+      hasState: false,
+      hasProps: false,
+      complexity: 'low'
     }
   }
 
@@ -144,6 +152,11 @@ async function analyzeFileContent(file: GitHubFile): Promise<{
     const routes = extractRoutes(content)
     const imports = extractImports(content)
     const exports = extractExports(content)
+    const hasState = /useState|useReducer|useContext/.test(content)
+    const hasProps = /props\.|interface.*Props|type.*Props/.test(content)
+    
+    // Calculate complexity based on various factors
+    const complexity = calculateComplexity(content)
 
     return {
       isPage,
@@ -151,7 +164,11 @@ async function analyzeFileContent(file: GitHubFile): Promise<{
       isLayout,
       routes,
       imports,
-      exports
+      exports,
+      content,
+      hasState,
+      hasProps,
+      complexity
     }
   } catch (error) {
     console.error(`Error analyzing file ${file.path}:`, error)
@@ -161,7 +178,11 @@ async function analyzeFileContent(file: GitHubFile): Promise<{
       isLayout: false,
       routes: [],
       imports: [],
-      exports: []
+      exports: [],
+      content: '',
+      hasState: false,
+      hasProps: false,
+      complexity: 'low'
     }
   }
 }
@@ -303,6 +324,71 @@ function extractExports(content: string): string[] {
 }
 
 /**
+ * Generate preview elements based on analysis
+ */
+function generatePreviewElements(analysis: Awaited<ReturnType<typeof analyzeFileContent>>): string[] {
+  const elements: string[] = []
+  
+  if (analysis.hasProps) elements.push('Props Interface')
+  if (analysis.hasState) elements.push('State Management')
+  if (analysis.routes.length > 0) elements.push('Navigation Logic')
+  if (analysis.content.includes('useEffect')) elements.push('Side Effects')
+  if (analysis.content.includes('fetch') || analysis.content.includes('axios')) elements.push('API Calls')
+  if (analysis.content.includes('onClick') || analysis.content.includes('onSubmit')) elements.push('Event Handlers')
+  if (analysis.content.includes('className') || analysis.content.includes('style')) elements.push('Styling')
+  if (analysis.exports.length > 1) elements.push('Multiple Exports')
+  
+  // Add default elements if none found
+  if (elements.length === 0) {
+    elements.push('JSX Return', 'Component Logic')
+  }
+  
+  return elements.slice(0, 4) // Limit to 4 elements for UI
+}
+
+/**
+ * Calculate component complexity based on various factors
+ */
+function calculateComplexity(content: string): 'low' | 'medium' | 'high' {
+  let score = 0
+  
+  // Count hooks usage
+  const hookPatterns = [
+    /useState/g, /useEffect/g, /useContext/g, /useReducer/g,
+    /useMemo/g, /useCallback/g, /useRef/g, /useImperativeHandle/g
+  ]
+  hookPatterns.forEach(pattern => {
+    const matches = content.match(pattern)
+    if (matches) score += matches.length
+  })
+  
+  // Count conditional rendering
+  const conditionalMatches = content.match(/\?\s*[^:]+\s*:/g)
+  if (conditionalMatches) score += conditionalMatches.length
+  
+  // Count loops/maps
+  const loopMatches = content.match(/\.map\(|\.filter\(|\.reduce\(/g)
+  if (loopMatches) score += loopMatches.length
+  
+  // Count event handlers
+  const eventMatches = content.match(/on[A-Z][a-zA-Z]*=/g)
+  if (eventMatches) score += eventMatches.length
+  
+  // Count API calls
+  const apiMatches = content.match(/fetch\(|axios\.|useQuery|useMutation/g)
+  if (apiMatches) score += apiMatches.length * 2
+  
+  // Count lines of code (rough estimate)
+  const lines = content.split('\n').filter(line => line.trim().length > 0).length
+  if (lines > 100) score += 2
+  if (lines > 200) score += 3
+  
+  if (score <= 3) return 'low'
+  if (score <= 8) return 'medium'
+  return 'high'
+}
+
+/**
  * Build page nodes from analyzed files
  */
 function buildPageNodes(analyzedFiles: Array<{
@@ -311,22 +397,25 @@ function buildPageNodes(analyzedFiles: Array<{
 }>): PageNode[] {
   const nodes: PageNode[] = []
   
+  // First pass: create all nodes
   analyzedFiles.forEach(({ file, analysis }, index) => {
     if (analysis.isPage || analysis.isComponent || analysis.isLayout) {
       const name = file.name.replace(/\.(tsx|jsx|ts|js)$/, '')
       const type = analysis.isPage ? 'page' : analysis.isLayout ? 'layout' : 'component'
       
-      // Generate connections based on routes found in the file
-      const connections = analysis.routes
-        .map(route => {
-          // Find other nodes that might match this route
-          const targetNode = analyzedFiles.find(({ file: f, analysis: a }) => 
-            (a.isPage || a.isComponent) && 
-            (f.path.includes(route.slice(1)) || route.includes(f.name.replace(/\.(tsx|jsx|ts|js)$/, '')))
-          )
-          return targetNode ? targetNode.file.path : null
-        })
-        .filter(Boolean) as string[]
+      // Generate preview data
+      const preview = {
+        title: name.charAt(0).toUpperCase() + name.slice(1),
+        description: type === 'page' 
+          ? `${name} page component with routing logic`
+          : type === 'layout'
+            ? `Layout wrapper component for ${name}`
+            : `Reusable ${name} component`,
+        elements: generatePreviewElements(analysis),
+        hasState: analysis.hasState,
+        hasProps: analysis.hasProps,
+        complexity: analysis.complexity
+      }
       
       nodes.push({
         id: file.path,
@@ -334,13 +423,51 @@ function buildPageNodes(analyzedFiles: Array<{
         path: analysis.routes[0] || `/${name.toLowerCase()}`,
         filePath: file.path,
         type,
-        connections,
+        connections: [], // Will be populated in second pass
+        preview,
         position: {
-          x: (index % 4) * 250 + 100,
-          y: Math.floor(index / 4) * 150 + 100
+          x: (index % 4) * 320 + 100,
+          y: Math.floor(index / 4) * 280 + 100
         }
       })
     }
+  })
+  
+  // Second pass: establish connections
+  nodes.forEach((node) => {
+    const nodeFile = analyzedFiles.find(({ file }) => file.path === node.id)
+    if (!nodeFile) return
+    
+    const connections = new Set<string>()
+    
+    // Find connections based on routes and imports
+    nodeFile.analysis.routes.forEach(route => {
+      // Look for nodes that match this route
+      const targetNode = nodes.find(n => 
+        n.path === route || 
+        n.name.toLowerCase() === route.slice(1).toLowerCase() ||
+        route.includes(n.name.toLowerCase())
+      )
+      if (targetNode && targetNode.id !== node.id) {
+        connections.add(targetNode.id)
+      }
+    })
+    
+    // Find connections based on imports
+    nodeFile.analysis.imports.forEach(importPath => {
+      if (importPath.startsWith('./') || importPath.startsWith('../')) {
+        // Resolve relative import to find matching node
+        const targetNode = nodes.find(n => 
+          n.filePath.includes(importPath.replace(/^\.\.?\//, '')) ||
+          importPath.includes(n.name.toLowerCase())
+        )
+        if (targetNode && targetNode.id !== node.id) {
+          connections.add(targetNode.id)
+        }
+      }
+    })
+    
+    node.connections = Array.from(connections)
   })
   
   return nodes
