@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { Toaster } from '@/components/ui/toaster'
 import Dashboard from '@/components/Dashboard'
-import FlowVisualizer from '@/components/FlowVisualizer'
-import { AnalysisResult } from '@/types/analysis'
+import PageFlowVisualizer from '@/components/PageFlowVisualizer'
+import { FlowAnalysisResult } from '@/types/analysis'
 
 function App() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'visualizer'>('dashboard')
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<FlowAnalysisResult | null>(null)
 
-  const handleAnalysisComplete = (result: AnalysisResult) => {
+  const handleAnalysisComplete = (result: FlowAnalysisResult) => {
     setAnalysisResult(result)
     setCurrentView('visualizer')
   }
@@ -23,7 +23,7 @@ function App() {
       {currentView === 'dashboard' ? (
         <Dashboard onAnalysisComplete={handleAnalysisComplete} />
       ) : (
-        <FlowVisualizer 
+        <PageFlowVisualizer 
           analysisResult={analysisResult!} 
           onBack={handleBackToDashboard}
         />

@@ -6,11 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { GitBranch, Upload, Zap, Eye, ArrowRight, Github } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { AnalysisResult } from '@/types/analysis'
+import { FlowAnalysisResult } from '@/types/analysis'
 import { analyzeGitHubRepo } from '@/lib/github-analyzer'
 
 interface DashboardProps {
-  onAnalysisComplete: (result: AnalysisResult) => void
+  onAnalysisComplete: (result: FlowAnalysisResult) => void
 }
 
 export default function Dashboard({ onAnalysisComplete }: DashboardProps) {

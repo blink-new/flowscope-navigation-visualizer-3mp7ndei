@@ -1,19 +1,38 @@
-export interface PageNode {
+export interface PageFlow {
   id: string
   name: string
   path: string
   filePath: string
-  type: 'page' | 'component' | 'layout'
-  connections: string[]
+  type: 'page' | 'layout' | 'modal' | 'redirect'
+  connections: PageConnection[]
   position?: { x: number; y: number }
-  preview?: {
+  metadata: {
     title: string
     description: string
-    elements: string[]
-    hasState: boolean
-    hasProps: boolean
+    hasAuth: boolean
+    hasParams: boolean
+    isProtected: boolean
     complexity: 'low' | 'medium' | 'high'
+    userActions: string[]
+    entryPoints: string[]
   }
+}
+
+export interface PageConnection {
+  targetPageId: string
+  type: 'navigation' | 'redirect' | 'modal' | 'conditional'
+  trigger: string // e.g., "button click", "form submit", "auto redirect"
+  condition?: string // e.g., "authenticated", "form valid"
+}
+
+export interface UserJourney {
+  id: string
+  name: string
+  description: string
+  steps: PageFlow[]
+  startPage: string
+  endPage: string
+  userType: 'guest' | 'authenticated' | 'admin'
 }
 
 export interface RouteInfo {
@@ -21,13 +40,16 @@ export interface RouteInfo {
   component: string
   filePath: string
   children?: RouteInfo[]
+  guards?: string[]
+  params?: string[]
 }
 
-export interface AnalysisResult {
+export interface FlowAnalysisResult {
   repoUrl: string
   repoName: string
-  pages: PageNode[]
+  pages: PageFlow[]
   routes: RouteInfo[]
+  userJourneys: UserJourney[]
   totalFiles: number
   analyzedFiles: number
   timestamp: string
@@ -39,3 +61,7 @@ export interface GitHubRepo {
   name: string
   branch?: string
 }
+
+// Legacy types for backward compatibility
+export type PageNode = PageFlow
+export type AnalysisResult = FlowAnalysisResult
